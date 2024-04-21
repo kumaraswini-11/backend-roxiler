@@ -46,17 +46,22 @@ const constructQuery = (month, searchText) => {
 
   // If searchText is provided and not empty/whitespace
   if (searchText && searchText.trim() !== "") {
+    const regexSearchText = searchText.trim();
     let textSearchQuery = {
       $or: [
-        { title: { $regex: searchText.trim(), $options: "i" } },
-        { description: { $regex: searchText.trim(), $options: "i" } },
+        { title: { $regex: regexSearchText, $options: "i" } }, 
+        { description: { $regex: regexSearchText, $options: "i" } },
+        {
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$price" }, // Convert price to string
+              regex: regexSearchText,
+              options: "i",
+            },
+          },
+        },
       ],
     };
-
-    const numberSearch = parseFloat(searchText.trim());
-    if (!isNaN(numberSearch)) {
-      textSearchQuery.$or.push({ price: numberSearch });
-    }
 
     // Combine finalQuery and textSearchQuery using $and
     finalQuery = {
