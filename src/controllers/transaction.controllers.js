@@ -312,34 +312,6 @@ const getCombinedData = async (req, res) => {
   }
 };
 
-const deleteRecord = async (req, res) => {
-  const { id, month } = req.query;
-
-  if (!id || !month) {
-    return res
-      .status(400)
-      .json({ message: "Transaction ID and month are required." });
-  }
-
-  try {
-    const searchedRecord = await Transaction.findById(id);
-    if (!searchedRecord) {
-      return res.status(404).json({ message: "Record not found" });
-    }
-
-    const date = new Date(searchedRecord.dateOfSale);
-    if (date.getMonth() + 1 !== parseInt(month)) {
-      return res.status(400).json({ message: "Record month is not matching" });
-    }
-
-    await Transaction.findByIdAndDelete(id);
-    res.status(200).json({ message: "Record deleted successfully" });
-  } catch (error) {
-    console.error("ERROR: ", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
 export {
   seedAllDataFromApi,
   listTransactions,
@@ -347,5 +319,4 @@ export {
   getBarChartData,
   getPieChartData,
   getCombinedData,
-  deleteRecord,
 };
