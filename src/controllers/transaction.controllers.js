@@ -2,7 +2,7 @@ import axios from "axios";
 import Transaction from "../models/transaction.models.js";
 import { SEED_THIRD_PARTY_URI as apiUrl } from "../constants.js";
 
-//  Run only once to seed data
+// Function to seed data from API
 const seedAllDataFromApi = async (req, res) => {
   try {
     const { data: apiData } = await axios.get(apiUrl);
@@ -38,23 +38,22 @@ const isValidMonth = (month) => {
 
 // Function to construct MongoDB query based on month and searchText
 const constructQuery = (month, searchText) => {
-  let finalQuery = {
+  const finalQuery = {
     $expr: {
       $eq: [{ $month: "$dateOfSale" }, Number(month)],
     },
   };
 
-  // If searchText is provided and not empty/whitespace
   if (searchText && searchText.trim() !== "") {
     const regexSearchText = searchText.trim();
-    let textSearchQuery = {
+    const textSearchQuery = {
       $or: [
-        { title: { $regex: regexSearchText, $options: "i" } }, 
+        { title: { $regex: regexSearchText, $options: "i" } },
         { description: { $regex: regexSearchText, $options: "i" } },
         {
           $expr: {
             $regexMatch: {
-              input: { $toString: "$price" }, // Convert price to string
+              input: { $toString: "$price" },
               regex: regexSearchText,
               options: "i",
             },
@@ -63,8 +62,7 @@ const constructQuery = (month, searchText) => {
       ],
     };
 
-    // Combine finalQuery and textSearchQuery using $and
-    finalQuery = {
+    return {
       $and: [finalQuery, textSearchQuery],
     };
   }
@@ -80,34 +78,24 @@ const listTransactions = async (req, res) => {
     perPage = 10,
   } = req.query;
 
-  // Validate month number
   if (!isValidMonth(selectedMonth)) {
     return res.status(400).json({ message: "Invalid month number" });
   }
 
-  // Parse and validate page and perPage values
   page = parseInt(page);
   perPage = parseInt(perPage);
   if (isNaN(page) || isNaN(perPage) || page <= 0 || perPage <= 0) {
     return res.status(400).json({ message: "Invalid pagination parameters" });
   }
 
-  // Calculate skip value for pagination
   const skip = (page - 1) * perPage;
-
-  // Construct MongoDB query
   const query = constructQuery(selectedMonth, searchText);
 
   try {
-    // Fetch transactions based on query, skip and limit
     const transactions = await Transaction.find(query)
       .skip(skip)
       .limit(perPage);
-
-    // Count total records based on query
     const totalRecords = await Transaction.countDocuments(query);
-
-    // Calculate total pages based on total records and perPage
     const totalPages = Math.ceil(totalRecords / perPage);
 
     res.json({
@@ -118,7 +106,7 @@ const listTransactions = async (req, res) => {
       data: transactions,
     });
   } catch (error) {
-    // console.error("ERROR: ", error);
+    console.error("ERROR: ", error);
     res.status(500).json({ message: "Failed to list transactions" });
   }
 };
@@ -126,16 +114,11 @@ const listTransactions = async (req, res) => {
 const getStatistics = async (req, res) => {
   const { month: monthNumber } = req.query;
 
-  // Validate month number if provided
   if (!isValidMonth(monthNumber)) {
     return res.status(400).json({ message: "Invalid month number" });
   }
 
   try {
-    // Calculate total records
-    // const totalRecords = await Transaction.countDocuments();
-
-    // Calculate total sold records for the specified month (month mandetory)
     const totalSoldRecords = await Transaction.aggregate([
       {
         $match: {
@@ -145,15 +128,12 @@ const getStatistics = async (req, res) => {
                 $eq: [{ $month: "$dateOfSale" }, Number(monthNumber)],
               },
             },
-            {
-              sold: true,
-            },
+            { sold: true },
           ],
         },
       },
     ]);
 
-    // Calculate total not sold records for the specified month
     const totalNotSoldRecords = await Transaction.aggregate([
       {
         $match: {
@@ -163,21 +143,16 @@ const getStatistics = async (req, res) => {
                 $eq: [{ $month: "$dateOfSale" }, Number(monthNumber)],
               },
             },
-            {
-              sold: false,
-            },
+            { sold: false },
           ],
         },
       },
     ]);
 
-    // Calculate total sale amount for the specified month
     const totalSaleAmount = await Transaction.aggregate([
       {
         $match: {
-          _id: {
-            $in: totalSoldRecords.map((record) => record._id),
-          },
+          _id: { $in: totalSoldRecords.map((record) => record._id) },
         },
       },
       {
@@ -195,7 +170,7 @@ const getStatistics = async (req, res) => {
       totalNotSoldItems: totalNotSoldRecords.length,
     });
   } catch (error) {
-    // console.error("ERROR: ", error);
+    console.error("ERROR: ", error);
     res.status(500).json({ message: "Failed to fetch statistics" });
   }
 };
@@ -203,13 +178,11 @@ const getStatistics = async (req, res) => {
 const getBarChartData = async (req, res) => {
   const { month: monthNumber } = req.query;
 
-  // Validate month number if provided
   if (monthNumber && !isValidMonth(monthNumber)) {
     return res.status(400).json({ message: "Invalid month number" });
   }
 
   try {
-    // Define all price ranges
     const priceRanges = [
       "0 - 100",
       "101 - 200",
@@ -223,7 +196,6 @@ const getBarChartData = async (req, res) => {
       "901 - above",
     ];
 
-    // Match transactions based on the month if provided
     const matchQuery = monthNumber
       ? {
           $expr: {
@@ -232,11 +204,8 @@ const getBarChartData = async (req, res) => {
         }
       : {};
 
-    // Group transactions by price range and count the number of items in each range
     const barChartData = await Transaction.aggregate([
-      {
-        $match: matchQuery,
-      },
+      { $match: matchQuery },
       {
         $group: {
           _id: {
@@ -258,7 +227,6 @@ const getBarChartData = async (req, res) => {
       },
     ]);
 
-    // Create an object with price range as key and count as value
     const formattedData = {};
     priceRanges.forEach((range) => {
       const matchedData = barChartData.find((item) => item._id === range);
@@ -275,13 +243,11 @@ const getBarChartData = async (req, res) => {
 const getPieChartData = async (req, res) => {
   const { month: monthNumber } = req.query;
 
-  // Validate month number if provided
   if (monthNumber && !isValidMonth(monthNumber)) {
     return res.status(400).json({ message: "Invalid month number" });
   }
 
   try {
-    // Match transactions based on the month if provided
     const matchQuery = monthNumber
       ? {
           $expr: {
@@ -290,20 +256,16 @@ const getPieChartData = async (req, res) => {
         }
       : {};
 
-    // Group transactions by category and count the number of items in each category
     const categoryData = await Transaction.aggregate([
-      {
-        $match: matchQuery,
-      },
+      { $match: matchQuery },
       {
         $group: {
-          _id: "$category", // Group by category
-          count: { $sum: 1 }, // Count number of items in each category
+          _id: "$category",
+          count: { $sum: 1 },
         },
       },
     ]);
 
-    // Format data for pie chart
     const formattedData = categoryData.map((item) => ({
       category: item._id,
       count: item.count,
@@ -311,7 +273,7 @@ const getPieChartData = async (req, res) => {
 
     res.json(formattedData);
   } catch (error) {
-    // console.error("ERROR: ", error);
+    console.error("ERROR: ", error);
     res.status(500).json({ message: "Failed to fetch pie chart data" });
   }
 };
@@ -319,7 +281,6 @@ const getPieChartData = async (req, res) => {
 const getCombinedData = async (req, res) => {
   const { month: monthNumber } = req.query;
 
-  // Validate month number provided
   if (!isValidMonth(monthNumber)) {
     return res.status(400).json({ message: "Invalid month number" });
   }
@@ -327,7 +288,6 @@ const getCombinedData = async (req, res) => {
   try {
     const domain = "http://localhost:9000/api/v1";
 
-    // Fetch data from all three APIs concurrently
     const [statisticsResponse, barChartResponse, pieChartResponse] =
       await Promise.all([
         axios.get(`${domain}/statistics?month=${monthNumber}`),
@@ -335,34 +295,44 @@ const getCombinedData = async (req, res) => {
         axios.get(`${domain}/pie-chart-data?month=${monthNumber}`),
       ]);
 
-    // Destructure data from responses
-    const statisticsData = statisticsResponse.data;
-    const barChartData = barChartResponse.data;
-    const pieChartData = pieChartResponse.data;
-
     const combinedData = {
-      barChartData,
-      pieChartData,
-      statisticsData,
+      statisticsData: statisticsResponse.data,
+      barChartData: barChartResponse.data,
+      pieChartData: pieChartResponse.data,
     };
 
     res.json(combinedData);
   } catch (error) {
-    // Detailed error handling and logging
     console.error("ERROR: ", error);
+    res.status(500).json({ message: "Failed to fetch combined data" });
+  }
+};
 
-    if (error.isAxiosError) {
-      if (error.response) {
-        console.error("Error Response Status:", error.response.status);
-        console.error("Error Response Data:", error.response.data);
-      } else if (error.request) {
-        console.error("Error Request:", error.request);
-      } else {
-        console.error("Error Message:", error.message);
-      }
+const deleteRecord = async (req, res) => {
+  const { id, month } = req.query;
+
+  if (!id || !month) {
+    return res
+      .status(400)
+      .json({ message: "Transaction ID and month are required." });
+  }
+
+  try {
+    const searchedRecord = await Transaction.findById(id);
+    if (!searchedRecord) {
+      return res.status(404).json({ message: "Record not found" });
     }
 
-    res.status(500).json({ message: "Failed to fetch combined data" });
+    const date = new Date(searchedRecord.dateOfSale);
+    if (date.getMonth() + 1 !== parseInt(month)) {
+      return res.status(400).json({ message: "Record month is not matching" });
+    }
+
+    await Transaction.findByIdAndDelete(id);
+    res.status(200).json({ message: "Record deleted successfully" });
+  } catch (error) {
+    console.error("ERROR: ", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -373,4 +343,5 @@ export {
   getBarChartData,
   getPieChartData,
   getCombinedData,
+  deleteRecord,
 };
