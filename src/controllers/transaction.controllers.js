@@ -152,20 +152,24 @@ const getStatistics = async (req, res) => {
     const totalSaleAmount = await Transaction.aggregate([
       {
         $match: {
-          _id: { $in: totalSoldRecords.map((record) => record._id) },
+          sold: true,
+          $expr: {
+            $and: { $eq: [{ $month: "$dateOfSale" }, Number(monthNumber)] },
+          },
         },
       },
       {
         $group: {
           _id: null,
-          totalSum: { $sum: "$price" },
+          totalSales: { $sum: "$price" },
         },
       },
     ]);
 
+    console.log(totalSaleAmount);
     res.json({
       totalSaleAmount:
-        totalSaleAmount.length > 0 ? totalSaleAmount[0].totalSum : 0,
+        totalSaleAmount.length > 0 ? totalSaleAmount[0].totalSales : 0,
       totalSoldItems: totalSoldRecords.length,
       totalNotSoldItems: totalNotSoldRecords.length,
     });
